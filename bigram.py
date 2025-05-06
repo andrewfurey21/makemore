@@ -2,6 +2,8 @@ import torch
 import torch.nn.functional as F
 import numpy as np
 
+# problem with table: adding more context requires exponentially more weights, but a lot of those weights are useless.
+
 def simple(freq):
     gen = torch.Generator().manual_seed(2147483647)
     index: int = 0
@@ -44,7 +46,7 @@ if __name__ == "__main__":
     nll = 0.0
     n = 0
     # for w in words[:3]:
-    for w in ["andrewqj"]:
+    for w in ["aj"]:
         c = [special] + list(w) + [special]
         for ch1, ch2 in zip(c, c[1:]):
             index1 = stoi[ch1]
