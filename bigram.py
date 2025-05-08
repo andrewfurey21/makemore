@@ -5,12 +5,12 @@ import numpy as np
 # problem with table: adding more context requires exponentially more weights, but a lot of those weights are useless.
 
 def simple(freq):
-    gen = torch.Generator().manual_seed(2147483647)
+    # gen = torch.Generator().manual_seed(2147483647)
     index: int = 0
     while True:
         probs = freq[index].float()
         probs = probs / probs.sum()
-        index = int(torch.multinomial(probs, num_samples=1, replacement=True, generator=gen).item())
+        index = int(torch.multinomial(probs, num_samples=1, replacement=True).item())
         if (index == 0): break
         print(itos[index], end="")
     print()
@@ -54,10 +54,10 @@ if __name__ == "__main__":
             prob = p[index1, index2]
             nll -= torch.log(prob)
             n+=1
-            print(f"{ch1}{ch2}: {prob:.4f}")
+            # print(f"{ch1}{ch2}: {prob:.4f}")
 
     nll /= n
-    print(f"{nll=}")
+    # print(f"{nll=}")
 
     # create training set
     gen = torch.Generator().manual_seed(2147483647)
@@ -85,7 +85,7 @@ if __name__ == "__main__":
         counts = logits.exp()
         probs = counts / counts.sum(dim=1, keepdim=True)
         loss = -probs[..., ys].log().mean()
-        print(loss)
+        # print(loss)
 
         # backward pass
         weights.grad = None
@@ -95,4 +95,6 @@ if __name__ == "__main__":
         # weights.data += -0.1 * weights.grad # type: ignore
         weights.data += -weights.grad # type: ignore
 
+    for i in range(10):
+        simple(freq)
 

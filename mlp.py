@@ -4,8 +4,10 @@ from tqdm import tqdm
 from matplotlib import pyplot as plt
 
 def model(inputs, size, E, W1, b1, W2, b2):
+    # dim=0 is the batches
     emb = E[inputs].view(-1, size) # can only infer one dimension
-    h1 = torch.tanh(emb @ W1 + b1)
+    hpreact = emb @ W1 + b1
+    h1 = torch.tanh(hpreact)
     return h1 @ W2 + b2
 
 if __name__ == "__main__":
@@ -16,20 +18,20 @@ if __name__ == "__main__":
     stoi[special] = 0
     itos = {s:i for i, s in stoi.items()}
 
-    # params
+    # hyperparameters
     gen = torch.Generator().manual_seed(123456)
     block_size = 3
     batch_size = 32
     emb_dims = 10
-    params = 200
+    hidden = 200
     lr_start = 0.1
-    steps = 50000
-    epoch = 2
+    steps = 10000
+    epoch = 1
+    vocab_size = 27
 
     # build a dataset
     X, Y = [], []
 
-    # for word in words[:5]:
     for word in words:
         context = [0] * block_size
         for ch in word + special:
@@ -42,13 +44,13 @@ if __name__ == "__main__":
     Y = torch.tensor(Y)
 
     # weights
-    E = torch.randn((27, emb_dims), dtype=torch.float32, requires_grad=True)
+    E = torch.randn((vocab_size, emb_dims), dtype=torch.float32, requires_grad=True, generator=gen)
 
-    W1 = torch.randn((emb_dims * block_size, params), dtype=torch.float32, requires_grad=True)
-    b1 = torch.randn(params, dtype=torch.float32, requires_grad=True)
+    W1 = torch.randn((emb_dims * block_size, hidden), dtype=torch.float32, requires_grad=True, generator=gen)
+    b1 = torch.randn(hidden, dtype=torch.float32, requires_grad=True, generator=gen)
 
-    W2 = torch.randn((params, 27), dtype=torch.float32, requires_grad=True)
-    b2 = torch.randn(27, dtype=torch.float32, requires_grad=True)
+    W2 = torch.randn((hidden, vocab_size), dtype=torch.float32, requires_grad=True, generator=gen)
+    b2 = torch.randn(vocab_size, dtype=torch.float32, requires_grad=True, generator=gen)
 
     # training
     parameters = [E, W1, b1, W2, b2]
@@ -59,7 +61,7 @@ if __name__ == "__main__":
     sit = []
     for batch in tqdm(range(steps * epoch)):
         # make a batch
-        i = torch.randint(0, X.shape[0], (batch_size,))
+        i = torch.randint(0, X.shape[0], (batch_size,), generator=gen)
         xs = X[i]
         ys = Y[i]
 
@@ -84,6 +86,8 @@ if __name__ == "__main__":
         sloss.append(loss.item())
 
     print(sloss[-1])
+    # for i in range(0, len(sloss), len(sloss)//10):
+    #     print(f"Loss {i}: {sloss[i]}")
 
     for i in range(10):
         string = []
@@ -98,5 +102,5 @@ if __name__ == "__main__":
             string.append(output)
         print(''.join(itos[s] for s in string))
 
-    plt.plot(sit, sloss)
-    plt.show()
+    # plt.plot(sit, sloss)
+    # plt.show()
