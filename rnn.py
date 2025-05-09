@@ -67,23 +67,33 @@ class Tanh:
     def parameters():
         return []
 
-class MLP:
+class RNN:
+    def __init__(self, input_size:int, hidden_size:int):
+        self.input_size = input_size
+        self.hidden_size = hidden_size
+        self.input_weights = torch.randn((input_size, hidden_size), dtype=torch.float32) * .01
+        self.state_weights = torch.randn((hidden_size, hidden_size), dtype=torch.float32) * .01
+
+    def __call__(self, input:torch.Tensor):
+        input_t = input.transpose(0, 1)
+        seq_len, batch_size, _ = input_t.shape
+        state = torch.zeros((batch_size, self.hidden_size))
+
+        for t in range(seq_len):
+            state = input_t[t] @ self.input_weights + state @ self.state_weights
+        return state
+
+    def parameters(self):
+        return [self.input_weights, self.state_weights]
+
+
+class CharRNN:
     def __init__(self, vocab_size:int, embedding_dim:int, block_size:int, hidden:int):
         self.layers = [
             Embeddings(vocab_size, embedding_dim),
-
-            Linear(embedding_dim * block_size, hidden, usebias=False),
+            RNN(embedding_dim, hidden),
             BatchNorm1D(hidden),
             Tanh(),
-
-            Linear(hidden, hidden * 2, usebias=False),
-            BatchNorm1D(hidden * 2),
-            Tanh(),
-
-            Linear(hidden * 2, hidden, usebias=False),
-            BatchNorm1D(hidden),
-            Tanh(),
-
             Linear(hidden, vocab_size)
         ]
 
@@ -119,11 +129,11 @@ if __name__ == "__main__":
 
     # hyperparameters
     block_size = 3
-    batch_size = 64
+    batch_size = 32
     emb_dims = 15
     hidden = 500
     lr_start = 0.05
-    steps = 100000
+    steps = 20000
     epoch = 1
     vocab_size = 27
 
@@ -142,12 +152,12 @@ if __name__ == "__main__":
     Y = torch.tensor(Y)
 
     # model
-    model = MLP(vocab_size, emb_dims, block_size, hidden)
+    model = CharRNN(vocab_size, emb_dims, block_size, hidden)
     for p in model.parameters(): p.requires_grad = True
 
     # training
-    # num_params = sum(p.numel() for p in parameters)
-    # print(f"{num_params=}")
+    num_params = sum(p.numel() for p in model.parameters())
+    print(f"{num_params=}")
     print("Training...")
     sloss = []
     sit = []
@@ -178,12 +188,14 @@ if __name__ == "__main__":
     # for i in range(0, len(sloss), len(sloss)//10):
     #     print(f"Loss {i}: {sloss[i]}")
 
+    # Inference
     for i in range(10):
         string = []
         context = [0] * block_size
         while True:
+            context_tensor = torch.tensor(context).reshape(1, block_size)
             with torch.no_grad():
-                logits = model(torch.tensor(context), training=False)
+                logits = model(context_tensor, training=False)
                 probs = F.softmax(logits, dim=1)
             output = torch.multinomial(probs, 1, replacement=True).item()
             context = context[1:] + [output]
