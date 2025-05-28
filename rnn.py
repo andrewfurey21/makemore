@@ -4,7 +4,7 @@ from tqdm import tqdm
 from matplotlib import pyplot as plt
 from typing import List
 
-torch.manual_seed(1)
+torch.manual_seed(2)
 
 class Embeddings:
     def __init__(self, vocab_size:int, dims:int):
@@ -128,12 +128,12 @@ if __name__ == "__main__":
     itos = {s:i for i, s in stoi.items()}
 
     # hyperparameters
-    block_size = 3
-    batch_size = 32
+    block_size = 5
+    batch_size = 200
     emb_dims = 15
-    hidden = 500
-    lr_start = 0.05
-    steps = 20000
+    hidden = 600
+    lr_start = 0.005
+    steps = 25000
     epoch = 1
     vocab_size = 27
 
