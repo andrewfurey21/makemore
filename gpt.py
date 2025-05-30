@@ -22,20 +22,25 @@ class ScaledDotProductAttention(torch.nn.Module):
         self.register_buffer("tril", torch.tril(torch.ones(self.block_size, self.block_size)))
 
     def forward(self, input):
-        affinities = (self.query(input) @ self.key(input).transpose(-2, -1)) * self.head_size**-0.5
+        _, T, _ = input.shape
+        k = self.key(input)
+        q = self.query(input)
+        v = self.value(input)
+        affinities = (q @ k.transpose(-2, -1)) * self.block_size **-0.5
         # to make this an encoder, remove mask
-        wei = torch.masked_fill(affinities, self.tril == 0, float('-inf')) # type: ignore
-        wei = torch.nn.functional.softmax(wei, dim=2)
-        logits = torch.nn.functional.dropout(wei @ self.value(input), p=0.1)
-        return logits
+        wei = torch.masked_fill(affinities, self.tril[:T, :T] == 0, float('-inf')) # type: ignore
+        wei = torch.nn.functional.softmax(wei, dim=-1)
+        out = wei @ v
+        return out 
 
 class MultiHeadAttention(torch.nn.Module):
     def __init__(self, num_heads:int, n_embeddings:int, head_size:int, block_size:int):
         super().__init__()
         self.heads = torch.nn.ModuleList([ScaledDotProductAttention(n_embeddings, head_size, block_size) for _ in range(num_heads)])
+        self.last_layer = torch.nn.Linear(num_heads * head_size, vocab_size, bias=False)
 
     def forward(self, input):
-        return torch.cat([head(input) for head in self.heads], dim=-1)
+        return self.last_layer(torch.cat([head(input) for head in self.heads], dim=-1))
 
 class TransformerBlock(torch.nn.Module):
     def __init__(self, vocab_size:int, n_embeddings:int, block_size:int, head_size:int, num_heads:int):
@@ -43,16 +48,26 @@ class TransformerBlock(torch.nn.Module):
         self.block_size = block_size
         self.embeddings = torch.nn.Embedding(vocab_size, n_embeddings)
         self.positional_embeddings = torch.nn.Embedding(block_size, n_embeddings) # in the paper its just a wave function
-        self.mha = MultiHeadAttention(num_heads, n_embeddings, head_size//num_heads, block_size) 
-        self.last_layer = torch.nn.Linear(n_embeddings, vocab_size, bias=False)
+        self.mha = MultiHeadAttention(num_heads, n_embeddings, head_size, block_size) 
+
+        self.layernorm1 = torch.nn.LayerNorm(n_embeddings)
+        self.layernorm2 = torch.nn.LayerNorm(vocab_size)
+        self.proj = torch.nn.Linear(n_embeddings, vocab_size)
+
+        self.ffn = torch.nn.Sequential(
+            torch.nn.Linear(vocab_size, 100),
+            torch.nn.ReLU(),
+            torch.nn.Linear(100, vocab_size),
+        )
+
 
     def forward(self, index: torch.Tensor, target: torch.Tensor | None = None):
         token_embeddings = self.embeddings(index)
         positional_embeddings = self.positional_embeddings(torch.arange(index.shape[1]))
 
         x = token_embeddings + positional_embeddings
-        mha = self.mha(x)
-        logits = self.last_layer(self.mha(x))
+        mha = self.mha(self.layernorm1(x)) + self.proj(x)
+        logits = self.ffn(self.layernorm2(mha)) + mha
 
         if target is not None:
             batch_size, block_size, vocab_size = logits.shape
@@ -65,8 +80,8 @@ class TransformerBlock(torch.nn.Module):
 
     def generate(self, index: torch.Tensor, max_new_tokens:int):
         for _ in range(max_new_tokens):
-            index_cond = index[:, -block_size:]
-            logits = self.embeddings(index_cond)
+            index_cond = index[:, -self.block_size:]
+            logits, _ = self(index_cond)
             logits = logits[:, -1, :]
             probs = torch.nn.functional.softmax(logits, dim=1)
             next_index = torch.multinomial(probs, num_samples=1)
@@ -79,12 +94,12 @@ if __name__ == "__main__":
 
     # hyper parameters
     ratio = 0.9
-    batch_size = 32
-    block_size = 8 # context length
-    training_steps = 10000
+    batch_size = 64
+    block_size = 16 # context length
+    training_steps = 20000
     n_embeddings = 32
     head_size = 32
-    num_heads = 4
+    num_heads = 8
 
     # read data
     with open("shakespeare.txt", "r", encoding="utf-8") as f:
@@ -102,13 +117,12 @@ if __name__ == "__main__":
 
     # define model and optimizer
     model = TransformerBlock(vocab_size, n_embeddings, block_size, head_size, num_heads)
-    optimizer = torch.optim.AdamW(model.parameters(), lr=1e-3)
+    optimizer = torch.optim.AdamW(model.parameters(), lr=3e-4)
 
     # training
     losses = []
     print("training...")
     for steps in trange(training_steps):
-    # for _ in range(1):
         X, Y = get_batch(train, block_size, batch_size)
         output, loss = model(X, Y)
         optimizer.zero_grad(set_to_none=True)
@@ -116,7 +130,7 @@ if __name__ == "__main__":
         optimizer.step()
         losses.append(loss.item())
 
-    print(decode(model.generate(torch.zeros(1, 1, dtype=torch.long), 100)[0].tolist(), itoc))
+    print(decode(model.generate(torch.zeros(1, 1, dtype=torch.long), 10000)[0].tolist(), itoc))
 
     plt.plot(losses)
     plt.show()
