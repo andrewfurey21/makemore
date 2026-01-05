@@ -21,11 +21,11 @@ if __name__ == "__main__":
     # hyperparameters
     gen = torch.Generator().manual_seed(123456)
     block_size = 3
-    batch_size = 32
+    batch_size = 64
     emb_dims = 10
     hidden = 200
     lr_start = 0.1
-    steps = 10000
+    steps = 20000
     epoch = 1
     vocab_size = 27
 
@@ -102,5 +102,5 @@ if __name__ == "__main__":
             string.append(output)
         print(''.join(itos[s] for s in string))
 
-    # plt.plot(sit, sloss)
-    # plt.show()
+    plt.plot(sit, sloss)
+    plt.show()

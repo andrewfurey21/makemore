@@ -1,3 +1,4 @@
 test.py
 shakespeare.txt
 gpt_output.txt
+__pycache__/
